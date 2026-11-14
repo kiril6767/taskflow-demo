@@ -1,57 +1,65 @@
 
 <script setup>
-import { computed } from 'vue';
-import StatusBadge from './StatusBadge.vue';
-import PriorityBadge from './PriorityBadge.vue';
+import { computed } from 'vue'
+import StatusBadge from './StatusBadge.vue'
+import PriorityBadge from './PriorityBadge.vue'
 
 const props = defineProps({
   task: {
     type: Object,
     required: true,
   },
-});
+  editable: {
+    type: Boolean,
+    default: false,
+  },
+})
 
-const emit = defineEmits(['status-change', 'priority-change']);
+const emit = defineEmits(['status-change', 'priority-change', 'edit'])
 
-const statusSequence = ['todo', 'progress', 'done'];
-const prioritySequence = ['low', 'medium', 'high'];
+const statusSequence = ['todo', 'progress', 'done']
+const prioritySequence = ['low', 'medium', 'high']
 
 const statusActionText = computed(() => ({
   todo: 'Взяти в роботу',
   progress: 'Завершити',
   done: 'Повернути в план',
-})[props.task.status] || 'Змінити статус');
+})[props.task.status] || 'Змінити статус')
 
 const formattedDate = computed(() => {
-  if (!props.task.dueDate) return 'Без терміну';
+  if (!props.task.dueDate) return 'Без терміну'
 
-  const date = new Date(`${props.task.dueDate}T12:00:00`);
+  const date = new Date(`${props.task.dueDate}T12:00:00`)
 
-  if (Number.isNaN(date.getTime())) return 'Дата не визначена';
+  if (Number.isNaN(date.getTime())) return 'Дата не визначена'
 
   return new Intl.DateTimeFormat('uk-UA', {
     day: '2-digit',
     month: 'long',
     year: 'numeric',
-  }).format(date);
-});
+  }).format(date)
+})
 
 function changeStatus() {
-  const index = statusSequence.indexOf(props.task.status);
+  const index = statusSequence.indexOf(props.task.status)
 
   emit('status-change', {
     id: props.task.id,
     status: statusSequence[(index + 1) % statusSequence.length],
-  });
+  })
 }
 
 function changePriority() {
-  const index = prioritySequence.indexOf(props.task.priority);
+  const index = prioritySequence.indexOf(props.task.priority)
 
   emit('priority-change', {
     id: props.task.id,
     priority: prioritySequence[(index + 1) % prioritySequence.length],
-  });
+  })
+}
+
+function editTask() {
+  emit('edit', props.task.id)
 }
 </script>
 
@@ -91,6 +99,15 @@ function changePriority() {
           @click="changePriority"
         >
           Змінити пріоритет
+        </button>
+
+        <button
+          v-if="editable"
+          type="button"
+          class="tf3-action"
+          @click="editTask"
+        >
+          Редагувати
         </button>
       </div>
     </f7-card-content>

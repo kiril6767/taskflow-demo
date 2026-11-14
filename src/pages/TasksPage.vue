@@ -1,45 +1,115 @@
 
 <script setup>
-import { ref, computed } from 'vue';
-import AppTabbar from '../components/AppTabbar.vue';
-import TaskCard from '../components/TaskCard.vue';
+import { ref, computed, nextTick } from 'vue'
+import AppTabbar from '../components/AppTabbar.vue'
+import TaskCard from '../components/TaskCard.vue'
+import TaskForm from '../components/TaskForm.vue'
+
 import {
   taskState,
+  addTask,
+  updateTask,
   setTaskStatus,
   setTaskPriority,
-} from '../store/tasks';
-import '../css/task-components.css';
+} from '../store/tasks'
 
-const selectedStatus = ref('all');
-const selectedPriority = ref('all');
+import '../css/task-components.css'
+import '../css/task-form.css'
+
+const selectedStatus = ref('all')
+const selectedPriority = ref('all')
+
+const formVisible = ref(false)
+const editingId = ref(null)
+const formAnchor = ref(null)
+const feedback = ref('')
 
 const statusOptions = [
   { value: 'all', label: 'Усі' },
   { value: 'todo', label: 'Заплановано' },
   { value: 'progress', label: 'У роботі' },
   { value: 'done', label: 'Виконано' },
-];
+]
 
 const priorityOptions = [
   { value: 'all', label: 'Усі' },
   { value: 'low', label: 'Низький' },
   { value: 'medium', label: 'Середній' },
   { value: 'high', label: 'Високий' },
-];
+]
 
 const filteredTasks = computed(() =>
   taskState.tasks.filter((task) =>
     (selectedStatus.value === 'all' || task.status === selectedStatus.value)
     && (selectedPriority.value === 'all' || task.priority === selectedPriority.value)
   )
-);
+)
+
+const editingTask = computed(() =>
+  taskState.tasks.find((task) => task.id === editingId.value) || null
+)
 
 function handleStatusChange(payload) {
-  setTaskStatus(payload);
+  setTaskStatus(payload)
 }
 
 function handlePriorityChange(payload) {
-  setTaskPriority(payload);
+  setTaskPriority(payload)
+}
+
+async function scrollToForm() {
+  await nextTick()
+  formAnchor.value?.scrollIntoView({
+    behavior: 'smooth',
+    block: 'start',
+  })
+}
+
+function createTask() {
+  editingId.value = null
+  feedback.value = ''
+  formVisible.value = true
+  scrollToForm()
+}
+
+function editTask(id) {
+  editingId.value = id
+  feedback.value = ''
+  formVisible.value = true
+  scrollToForm()
+}
+
+function cancelForm() {
+  formVisible.value = false
+  editingId.value = null
+}
+
+function saveTask(data) {
+  let result
+
+  if (editingId.value !== null) {
+    result = updateTask({
+      id: editingId.value,
+      ...data,
+    })
+  } else {
+    result = addTask(data)
+  }
+
+  if (!result) {
+    feedback.value = 'Не вдалося зберегти завдання. Перевірте введені дані.'
+    return
+  }
+
+  feedback.value = editingId.value !== null
+    ? 'Завдання успішно оновлено!'
+    : 'Нове завдання успішно створено!'
+
+  formVisible.value = false
+  editingId.value = null
+
+  selectedStatus.value = 'all'
+  selectedPriority.value = 'all'
 }
 </script>
 
@@ -52,6 +122,33 @@ function handlePriorityChange(payload) {
         <div class="tf3-eyebrow">TASKFLOW / TASK MANAGER</div>
         <h1>Мої завдання</h1>
         <p>Керуйте завданнями, статусами та пріоритетами.</p>
+      </section>
+
+      <section class="tf3-section">
+        <button
+          type="button"
+          class="tf3-action tf3-action--primary"
+          @click="createTask"
+        >
+          + Додати завдання
+        </button>
+
+        <p
+          v-if="feedback"
+          class="task-form-feedback"
+          role="status"
+        >
+          {{ feedback }}
+        </p>
+
+        <div v-if="formVisible" ref="formAnchor">
+          <TaskForm
+            :key="editingId ?? 'new'"
+            :task="editingTask"
+            @save="saveTask"
+            @cancel="cancelForm"
+          />
+        </div>
       </section>
 
       <section class="tf3-filters">
@@ -109,8 +206,10 @@ function handlePriorityChange(payload) {
             v-for="task in filteredTasks"
             :key="task.id"
             :task="task"
+            :editable="true"
             @status-change="handleStatusChange"
             @priority-change="handlePriorityChange"
+            @edit="editTask"
           />
         </div>
 
