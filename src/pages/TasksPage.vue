@@ -1,115 +1,119 @@
 
 <script setup>
-import { ref, computed, nextTick } from 'vue'
+import { ref, computed } from 'vue'
 import AppTabbar from '../components/AppTabbar.vue'
 import TaskCard from '../components/TaskCard.vue'
 import TaskForm from '../components/TaskForm.vue'
+import TaskListControls from '../components/TaskListControls.vue'
 
 import {
   taskState,
   addTask,
   updateTask,
+  deleteTask,
   setTaskStatus,
   setTaskPriority,
 } from '../store/tasks'
 
 import '../css/task-components.css'
-import '../css/task-form.css'
+import '../css/task-list.css'
 
+const searchText = ref('')
 const selectedStatus = ref('all')
 const selectedPriority = ref('all')
+const sortOrder = ref('newest')
 
-const formVisible = ref(false)
+const showForm = ref(false)
 const editingId = ref(null)
-const formAnchor = ref(null)
-const feedback = ref('')
 
-const statusOptions = [
-  { value: 'all', label: 'Усі' },
-  { value: 'todo', label: 'Заплановано' },
-  { value: 'progress', label: 'У роботі' },
-  { value: 'done', label: 'Виконано' },
-]
-
-const priorityOptions = [
-  { value: 'all', label: 'Усі' },
-  { value: 'low', label: 'Низький' },
-  { value: 'medium', label: 'Середній' },
-  { value: 'high', label: 'Високий' },
-]
-
-const filteredTasks = computed(() =>
-  taskState.tasks.filter((task) =>
-    (selectedStatus.value === 'all' || task.status === selectedStatus.value)
-    && (selectedPriority.value === 'all' || task.priority === selectedPriority.value)
-  )
+const editingTask = computed(
+  () => taskState.tasks.find((task) => task.id === editingId.value) ?? null,
 )
 
-const editingTask = computed(() =>
-  taskState.tasks.find((task) => task.id === editingId.value) || null
-)
+const visibleTasks = computed(() => {
+  const term = searchText.value.trim().toLocaleLowerCase('uk-UA')
+  const priorityWeight = { high: 3, medium: 2, low: 1 }
 
-function handleStatusChange(payload) {
-  setTaskStatus(payload)
-}
+  const result = taskState.tasks.filter((task) => {
+    const matchesText = !term ||
+      `${task.title} ${task.description ?? ''}`
+        .toLocaleLowerCase('uk-UA')
+        .includes(term)
 
-function handlePriorityChange(payload) {
-  setTaskPriority(payload)
-}
+    const matchesStatus =
+      selectedStatus.value === 'all' ||
+      task.status === selectedStatus.value
 
-async function scrollToForm() {
-  await nextTick()
-  formAnchor.value?.scrollIntoView({
-    behavior: 'smooth',
-    block: 'start',
+    const matchesPriority =
+      selectedPriority.value === 'all' ||
+      task.priority === selectedPriority.value
+
+    return matchesText && matchesStatus && matchesPriority
   })
+
+  return result.sort((a, b) => {
+    if (sortOrder.value === 'title') {
+      return a.title.localeCompare(b.title, 'uk-UA') || a.id - b.id
+    }
+
+    if (sortOrder.value === 'priority') {
+      return priorityWeight[b.priority] - priorityWeight[a.priority]
+        || b.id - a.id
+    }
+
+    if (sortOrder.value === 'dueDate') {
+      const first = a.dueDate || '9999-12-31'
+      const second = b.dueDate || '9999-12-31'
+      return first.localeCompare(second) || b.id - a.id
+    }
+
+    return b.id - a.id
+  })
+})
+
+function resetFilters() {
+  searchText.value = ''
+  selectedStatus.value = 'all'
+  selectedPriority.value = 'all'
+  sortOrder.value = 'newest'
 }
 
-function createTask() {
+function startCreate() {
   editingId.value = null
-  feedback.value = ''
-  formVisible.value = true
-  scrollToForm()
+  showForm.value = true
 }
 
-function editTask(id) {
+function startEdit(id) {
   editingId.value = id
-  feedback.value = ''
-  formVisible.value = true
-  scrollToForm()
+  showForm.value = true
 }
 
 function cancelForm() {
-  formVisible.value = false
   editingId.value = null
+  showForm.value = false
 }
 
-function saveTask(data) {
-  let result
+function saveTask(values) {
+  const saved = values.id === null
+    ? addTask(values)
+    : updateTask(values)
 
-  if (editingId.value !== null) {
-    result = updateTask({
-      id: editingId.value,
-      ...data,
-    })
-  } else {
-    result = addTask(data)
+  if (saved) cancelForm()
+}
+
+function handleDelete(id) {
+  const task = taskState.tasks.find((item) => item.id === id)
+  if (!task) return
+
+  const confirmed = window.confirm(
+    `Видалити завдання «${task.title}»?`
+  )
+
+  if (!confirmed) return
+
+  if (deleteTask(id) && editingId.value === id) {
+    cancelForm()
   }
-
-  if (!result) {
-    feedback.value = 'Не вдалося зберегти завдання. Перевірте введені дані.'
-    return
-  }
-
-  feedback.value = editingId.value !== null
-    ? 'Завдання успішно оновлено!'
-    : 'Нове завдання успішно створено!'
-
-  formVisible.value = false
-  editingId.value = null
-
-  selectedStatus.value = 'all'
-  selectedPriority.value = 'all'
 }
 </script>
 
@@ -120,74 +124,35 @@ function saveTask(data) {
     <div class="tf3-container">
       <section class="tf3-hero">
         <div class="tf3-eyebrow">TASKFLOW / TASK MANAGER</div>
-        <h1>Мої завдання</h1>
-        <p>Керуйте завданнями, статусами та пріоритетами.</p>
-      </section>
+        <h1>Керування завданнями</h1>
+        <p>
+          Створюйте, редагуйте, знаходьте, сортуйте та видаляйте завдання.
+        </p>
 
-      <section class="tf3-section">
         <button
           type="button"
-          class="tf3-action tf3-action--primary"
-          @click="createTask"
+          class="tf5-btn tf5-btn--primary tf5-new"
+          @click="startCreate"
         >
           + Додати завдання
         </button>
-
-        <p
-          v-if="feedback"
-          class="task-form-feedback"
-          role="status"
-        >
-          {{ feedback }}
-        </p>
-
-        <div v-if="formVisible" ref="formAnchor">
-          <TaskForm
-            :key="editingId ?? 'new'"
-            :task="editingTask"
-            @save="saveTask"
-            @cancel="cancelForm"
-          />
-        </div>
       </section>
 
-      <section class="tf3-filters">
-        <div class="tf3-filter-group">
-          <div class="tf3-filter-title">Фільтр за статусом</div>
+      <TaskForm
+        v-if="showForm"
+        :key="editingId ?? 'new'"
+        :task="editingTask"
+        @save="saveTask"
+        @cancel="cancelForm"
+      />
 
-          <div class="tf3-filter-buttons">
-            <button
-              v-for="option in statusOptions"
-              :key="option.value"
-              type="button"
-              class="tf3-filter-button"
-              :class="{ 'is-active': selectedStatus === option.value }"
-              :aria-pressed="selectedStatus === option.value"
-              @click="selectedStatus = option.value"
-            >
-              {{ option.label }}
-            </button>
-          </div>
-        </div>
-
-        <div class="tf3-filter-group">
-          <div class="tf3-filter-title">Фільтр за пріоритетом</div>
-
-          <div class="tf3-filter-buttons">
-            <button
-              v-for="option in priorityOptions"
-              :key="option.value"
-              type="button"
-              class="tf3-filter-button"
-              :class="{ 'is-active': selectedPriority === option.value }"
-              :aria-pressed="selectedPriority === option.value"
-              @click="selectedPriority = option.value"
-            >
-              {{ option.label }}
-            </button>
-          </div>
-        </div>
-      </section>
+      <TaskListControls
+        v-model:search="searchText"
+        v-model:status="selectedStatus"
+        v-model:priority="selectedPriority"
+        v-model:sort="sortOrder"
+        @reset="resetFilters"
+      />
 
       <section class="tf3-section">
         <div class="tf3-section-heading">
@@ -197,24 +162,32 @@ function saveTask(data) {
           </div>
 
           <div class="tf3-counter">
-            Знайдено: {{ filteredTasks.length }}
+            Показано: {{ visibleTasks.length }} із {{ taskState.tasks.length }}
           </div>
         </div>
 
-        <div v-if="filteredTasks.length" class="tf3-task-grid">
+        <div v-if="visibleTasks.length" class="tf3-task-grid">
           <TaskCard
-            v-for="task in filteredTasks"
+            v-for="task in visibleTasks"
             :key="task.id"
             :task="task"
-            :editable="true"
-            @status-change="handleStatusChange"
-            @priority-change="handlePriorityChange"
-            @edit="editTask"
+            @status-change="setTaskStatus"
+            @priority-change="setTaskPriority"
+            @edit="startEdit"
+            @delete="handleDelete"
           />
         </div>
 
-        <div v-else class="tf3-empty">
-          За обраними фільтрами завдань не знайдено.
+        <div v-else class="tf5-empty">
+          <p>За поточними умовами завдань не знайдено.</p>
+
+          <button
+            type="button"
+            class="tf5-btn"
+            @click="resetFilters"
+          >
+            Показати всі завдання
+          </button>
         </div>
       </section>
     </div>
