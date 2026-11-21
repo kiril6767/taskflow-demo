@@ -1,65 +1,61 @@
 
 <script setup>
-import { computed } from 'vue'
-import StatusBadge from './StatusBadge.vue'
-import PriorityBadge from './PriorityBadge.vue'
+import { computed } from 'vue';
+import StatusBadge from './StatusBadge.vue';
+import PriorityBadge from './PriorityBadge.vue';
 
 const props = defineProps({
-  task: {
-    type: Object,
-    required: true,
-  },
-  editable: {
-    type: Boolean,
-    default: false,
-  },
-})
+  task: { type: Object, required: true },
+  projectTitle: { type: String, default: 'Загальні' },
+  showManagementActions: { type: Boolean, default: true },
+});
 
-const emit = defineEmits(['status-change', 'priority-change', 'edit'])
+const emit = defineEmits([
+  'status-change',
+  'priority-change',
+  'edit',
+  'delete',
+]);
 
-const statusSequence = ['todo', 'progress', 'done']
-const prioritySequence = ['low', 'medium', 'high']
+const statusSequence = ['todo', 'progress', 'done'];
+const prioritySequence = ['low', 'medium', 'high'];
 
 const statusActionText = computed(() => ({
   todo: 'Взяти в роботу',
   progress: 'Завершити',
   done: 'Повернути в план',
-})[props.task.status] || 'Змінити статус')
+})[props.task.status] || 'Змінити статус');
 
 const formattedDate = computed(() => {
-  if (!props.task.dueDate) return 'Без терміну'
+  if (!props.task.dueDate) return 'Без терміну';
 
-  const date = new Date(`${props.task.dueDate}T12:00:00`)
+  const date = new Date(`${props.task.dueDate}T12:00:00`);
 
-  if (Number.isNaN(date.getTime())) return 'Дата не визначена'
+  if (Number.isNaN(date.getTime())) return 'Дата не визначена';
 
   return new Intl.DateTimeFormat('uk-UA', {
     day: '2-digit',
     month: 'long',
     year: 'numeric',
-  }).format(date)
-})
+  }).format(date);
+});
 
 function changeStatus() {
-  const index = statusSequence.indexOf(props.task.status)
+  const currentIndex = statusSequence.indexOf(props.task.status);
 
   emit('status-change', {
     id: props.task.id,
-    status: statusSequence[(index + 1) % statusSequence.length],
-  })
+    status: statusSequence[(currentIndex + 1) % statusSequence.length],
+  });
 }
 
 function changePriority() {
-  const index = prioritySequence.indexOf(props.task.priority)
+  const currentIndex = prioritySequence.indexOf(props.task.priority);
 
   emit('priority-change', {
     id: props.task.id,
-    priority: prioritySequence[(index + 1) % prioritySequence.length],
-  })
-}
-
-function editTask() {
-  emit('edit', props.task.id)
+    priority: prioritySequence[(currentIndex + 1) % prioritySequence.length],
+  });
 }
 </script>
 
@@ -71,7 +67,9 @@ function editTask() {
         <StatusBadge :status="task.status" />
       </div>
 
-      <p class="tf3-card-description">{{ task.description }}</p>
+      <p class="tf3-card-description">
+        {{ task.description || 'Без опису' }}
+      </p>
 
       <div class="tf3-card-meta">
         <div class="tf3-meta-item">
@@ -82,9 +80,13 @@ function editTask() {
         <div class="tf3-meta-date">
           Термін: {{ formattedDate }}
         </div>
+
+        <div class="tf3-meta-date">
+          Проєкт: {{ projectTitle }}
+        </div>
       </div>
 
-      <div class="tf3-card-actions">
+      <div class="tf3-card-actions tf5-card-actions">
         <button
           type="button"
           class="tf3-action tf3-action--primary"
@@ -98,16 +100,25 @@ function editTask() {
           class="tf3-action"
           @click="changePriority"
         >
-          Змінити пріоритет
+          Пріоритет
         </button>
 
         <button
-          v-if="editable"
+          v-if="showManagementActions"
           type="button"
           class="tf3-action"
-          @click="editTask"
+          @click="emit('edit', task.id)"
         >
           Редагувати
+        </button>
+
+        <button
+          v-if="showManagementActions"
+          type="button"
+          class="tf3-action tf5-danger"
+          @click="emit('delete', task.id)"
+        >
+          Видалити
         </button>
       </div>
     </f7-card-content>

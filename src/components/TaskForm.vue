@@ -1,171 +1,156 @@
 
 <script setup>
-import { computed, reactive, ref } from 'vue'
+import { reactive, ref, watch } from 'vue';
 
 const props = defineProps({
-  task: {
-    type: Object,
-    default: null,
-  },
-})
+  task: { type: Object, default: null },
+  projects: { type: Array, required: true },
+});
 
-const emit = defineEmits(['save', 'cancel'])
+const emit = defineEmits(['save', 'cancel']);
 
 const form = reactive({
-  title: props.task?.title ?? '',
-  description: props.task?.description ?? '',
-  status: props.task?.status ?? 'todo',
-  priority: props.task?.priority ?? 'medium',
-  dueDate: props.task?.dueDate ?? '',
-})
+  title: '',
+  description: '',
+  status: 'todo',
+  priority: 'medium',
+  dueDate: '',
+  projectId: 'general',
+});
 
-const showErrors = ref(false)
-const isEditing = computed(() => props.task !== null)
+const error = ref('');
 
-const statusLabels = {
-  todo: 'Очікує',
-  progress: 'У процесі',
-  done: 'Виконано',
-}
+watch(
+  () => props.task,
+  (task) => {
+    form.title = task?.title ?? '';
+    form.description = task?.description ?? '';
+    form.status = task?.status ?? 'todo';
+    form.priority = task?.priority ?? 'medium';
+    form.dueDate = task?.dueDate ?? '';
+    form.projectId = task?.projectId ?? 'general';
+    error.value = '';
+  },
+  { immediate: true }
+);
 
-const priorityLabels = {
-  low: 'Низький',
-  medium: 'Середній',
-  high: 'Високий',
-}
+function submit() {
+  const title = form.title.trim();
+  const description = form.description.trim();
 
-function isValidDate(value) {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false
-
-  const date = new Date(`${value}T12:00:00`)
-
-  return !Number.isNaN(date.getTime()) &&
-    `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}` === value
-}
-
-const errors = computed(() => {
-  const result = {}
-
-  if (!form.title.trim()) {
-    result.title = 'Введіть назву завдання'
-  } else if (form.title.trim().length < 3) {
-    result.title = 'Назва має містити щонайменше 3 символи'
-  } else if (form.title.trim().length > 80) {
-    result.title = 'Назва не може містити більше 80 символів'
+  if (title.length < 3 || title.length > 80) {
+    error.value = 'Назва повинна містити від 3 до 80 символів.';
+    return;
   }
 
-  if (form.description.trim().length > 300) {
-    result.description = 'Опис не може містити більше 300 символів'
+  if (description.length > 500) {
+    error.value = 'Опис не може перевищувати 500 символів.';
+    return;
   }
 
-  if (!['todo', 'progress', 'done'].includes(form.status)) {
-    result.status = 'Оберіть правильний статус'
+  if (form.dueDate && !/^\d{4}-\d{2}-\d{2}$/.test(form.dueDate)) {
+    error.value = 'Дата повинна мати коректний формат.';
+    return;
   }
 
-  if (!['low', 'medium', 'high'].includes(form.priority)) {
-    result.priority = 'Оберіть правильний пріоритет'
+  if (!props.projects.some((project) => project.id === form.projectId)) {
+    error.value = 'Оберіть проєкт зі списку.';
+    return;
   }
 
-  if (!isValidDate(form.dueDate)) {
-    result.dueDate = 'Оберіть коректну дату виконання'
-  }
-
-  return result
-})
-
-function submitForm() {
-  showErrors.value = true
-
-  if (Object.keys(errors.value).length > 0) return
+  error.value = '';
 
   emit('save', {
-    title: form.title.trim(),
-    description: form.description.trim(),
+    id: props.task?.id ?? null,
+    title,
+    description,
     status: form.status,
     priority: form.priority,
     dueDate: form.dueDate,
-  })
+    projectId: form.projectId,
+  });
 }
 </script>
 
 <template>
-  <section class="task-form-panel">
-    <h2>{{ isEditing ? 'Редагувати завдання' : 'Нове завдання' }}</h2>
+  <section class="tf5-panel" aria-label="Форма завдання">
+    <h2>{{ task ? 'Редагування завдання' : 'Нове завдання' }}</h2>
 
-    <div class="task-preview">
-      <h3>Попередній перегляд</h3>
-      <strong>{{ form.title || 'Назва завдання' }}</strong>
-      <p>{{ form.description || 'Опис завдання з’явиться тут' }}</p>
-      <span>{{ statusLabels[form.status] }}</span>
-      <span> · {{ priorityLabels[form.priority] }}</span>
-      <p>Дата виконання: {{ form.dueDate || 'Не вибрана' }}</p>
-    </div>
-
-    <form novalidate @submit.prevent="submitForm">
-      <div class="form-field">
-        <label for="task-title">Назва завдання</label>
+    <form class="tf5-form" @submit.prevent="submit">
+      <label>
+        Назва завдання *
         <input
-          id="task-title"
-          v-model.trim="form.title"
+          v-model="form.title"
           type="text"
           maxlength="80"
-          aria-describedby="title-error"
+          placeholder="Назва завдання"
         />
-        <p v-if="showErrors && errors.title" id="title-error" class="field-error">
-          {{ errors.title }}
-        </p>
-      </div>
+      </label>
 
-      <div class="form-field">
-        <label for="task-description">Опис</label>
+      <label>
+        Опис
         <textarea
-          id="task-description"
-          v-model.trim="form.description"
-          maxlength="300"
+          v-model="form.description"
           rows="3"
-          aria-describedby="description-error"
+          maxlength="500"
+          placeholder="Деталі виконання"
         ></textarea>
-        <p v-if="showErrors && errors.description" id="description-error" class="field-error">
-          {{ errors.description }}
-        </p>
+      </label>
+
+      <div class="tf5-form-grid">
+        <label>
+          Статус
+          <select v-model="form.status">
+            <option value="todo">Заплановано</option>
+            <option value="progress">У роботі</option>
+            <option value="done">Виконано</option>
+          </select>
+        </label>
+
+        <label>
+          Пріоритет
+          <select v-model="form.priority">
+            <option value="low">Низький</option>
+            <option value="medium">Середній</option>
+            <option value="high">Високий</option>
+          </select>
+        </label>
       </div>
 
-      <div class="form-field">
-        <label for="task-status">Статус</label>
-        <select id="task-status" v-model="form.status">
-          <option value="todo">Очікує</option>
-          <option value="progress">У процесі</option>
-          <option value="done">Виконано</option>
-        </select>
+      <div class="tf5-form-grid">
+        <label>
+          Проєкт
+          <select v-model="form.projectId">
+            <option
+              v-for="project in projects"
+              :key="project.id"
+              :value="project.id"
+            >
+              {{ project.title }}
+            </option>
+          </select>
+        </label>
+
+        <label>
+          Термін виконання
+          <input v-model="form.dueDate" type="date" />
+        </label>
       </div>
 
-      <div class="form-field">
-        <label for="task-priority">Пріоритет</label>
-        <select id="task-priority" v-model="form.priority">
-          <option value="low">Низький</option>
-          <option value="medium">Середній</option>
-          <option value="high">Високий</option>
-        </select>
-      </div>
+      <p v-if="error" class="tf5-error" role="alert">
+        {{ error }}
+      </p>
 
-      <div class="form-field">
-        <label for="task-date">Дата виконання</label>
-        <input
-          id="task-date"
-          v-model="form.dueDate"
-          type="date"
-          aria-describedby="date-error"
-        />
-        <p v-if="showErrors && errors.dueDate" id="date-error" class="field-error">
-          {{ errors.dueDate }}
-        </p>
-      </div>
-
-      <div class="form-actions">
-        <button type="submit">
-          {{ isEditing ? 'Зберегти зміни' : 'Створити завдання' }}
+      <div class="tf5-actions">
+        <button type="submit" class="tf5-btn tf5-btn--primary">
+          {{ task ? 'Зберегти зміни' : 'Створити завдання' }}
         </button>
-        <button type="button" @click="emit('cancel')">
+
+        <button
+          type="button"
+          class="tf5-btn"
+          @click="emit('cancel')"
+        >
           Скасувати
         </button>
       </div>
