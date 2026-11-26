@@ -1,21 +1,19 @@
-
 <script setup>
-import { ref, computed } from 'vue';
-import { storeToRefs } from 'pinia';
+import { ref, computed } from 'vue'
+import { storeToRefs } from 'pinia'
+import AppTabbar from '../components/AppTabbar.vue'
+import TaskCard from '../components/TaskCard.vue'
+import TaskForm from '../components/TaskForm.vue'
+import TaskListControls from '../components/TaskListControls.vue'
+import { useTasksStore } from '../store/tasks'
+import { useProjectsStore } from '../store/projects'
+import { persistenceState, retrySave } from '../services/persistence'
+import '../css/task-components.css'
+import '../css/task-list.css'
+import '../css/persistence.css'
 
-import AppTabbar from '../components/AppTabbar.vue';
-import TaskCard from '../components/TaskCard.vue';
-import TaskForm from '../components/TaskForm.vue';
-import TaskListControls from '../components/TaskListControls.vue';
-
-import { useTasksStore } from '../store/tasks';
-import { useProjectsStore } from '../store/projects';
-
-import '../css/task-components.css';
-import '../css/task-list.css';
-
-const taskStore = useTasksStore();
-const projectStore = useProjectsStore();
+const taskStore = useTasksStore()
+const projectStore = useProjectsStore()
 
 const {
   tasks,
@@ -25,77 +23,98 @@ const {
   selectedPriority,
   selectedProject,
   sortOrder,
-} = storeToRefs(taskStore);
+} = storeToRefs(taskStore)
 
-const { projects } = storeToRefs(projectStore);
+const { projects } = storeToRefs(projectStore)
 
-const showForm = ref(false);
-const editingId = ref(null);
-const newProjectTitle = ref('');
-const newProjectError = ref('');
+const showForm = ref(false)
+const editingId = ref(null)
+const newProjectTitle = ref('')
+const newProjectError = ref('')
 
 const editingTask = computed(() =>
-  tasks.value.find((task) => task.id === editingId.value) ?? null
-);
+  tasks.value.find((task) => task.id === editingId.value) ?? null,
+)
 
 const projectStats = computed(() =>
   projects.value.map((project) => ({
     ...project,
     taskCount: tasks.value.filter(
-      (task) => task.projectId === project.id
+      (task) => task.projectId === project.id,
     ).length,
-  }))
-);
+  })),
+)
+
+const saveMessage = computed(() => {
+  if (persistenceState.status === 'loading') {
+    return 'Завантаження локальних даних…'
+  }
+
+  if (persistenceState.status === 'saving') {
+    return 'Збереження змін у IndexedDB…'
+  }
+
+  if (persistenceState.status === 'saved') {
+    return 'Усі зміни збережено в цьому браузері.'
+  }
+
+  return persistenceState.error || 'Помилка локального збереження.'
+})
 
 function startCreate() {
-  editingId.value = null;
-  showForm.value = true;
+  editingId.value = null
+  showForm.value = true
 }
 
 function startEdit(id) {
-  editingId.value = id;
-  showForm.value = true;
+  editingId.value = id
+  showForm.value = true
 }
 
 function cancelForm() {
-  editingId.value = null;
-  showForm.value = false;
+  editingId.value = null
+  showForm.value = false
 }
 
 function saveTask(values) {
   const saved = values.id === null
     ? taskStore.addTask(values)
-    : taskStore.updateTask(values);
+    : taskStore.updateTask(values)
 
-  if (saved) cancelForm();
+  if (saved) {
+    cancelForm()
+  }
 }
 
 function handleDelete(id) {
-  const task = tasks.value.find(
-    (item) => item.id === Number(id)
-  );
+  const task = tasks.value.find((item) => item.id === Number(id))
 
-  if (!task) return;
+  if (!task) return
 
-  if (!window.confirm(`Видалити завдання «${task.title}»?`)) return;
+  if (!window.confirm(`Видалити завдання «${task.title}»?`)) {
+    return
+  }
 
-  if (taskStore.deleteTask(id) && editingId.value === id) {
-    cancelForm();
+  if (
+    taskStore.deleteTask(id) &&
+    editingId.value === id
+  ) {
+    cancelForm()
   }
 }
 
 function createProject() {
-  const project = projectStore.addProject(newProjectTitle.value);
+  const project = projectStore.addProject(newProjectTitle.value)
 
   if (!project) {
     newProjectError.value =
-      'Назва: 3–40 символів. Не повторюйте назви проєктів.';
-    return;
+      'Назва: 3–40 символів. Не повторюйте назви проєктів.'
+    return
   }
 
-  newProjectTitle.value = '';
-  newProjectError.value = '';
-  selectedProject.value = project.id;
+  newProjectTitle.value = ''
+  newProjectError.value = ''
+  selectedProject.value = project.id
 }
 </script>
 
@@ -110,7 +129,8 @@ function createProject() {
         <h1>Керування завданнями і проєктами</h1>
 
         <p>
-          Pinia забезпечує спільний стан між вкладками без перезавантаження.
+          Pinia керує станом, IndexedDB зберігає завдання
+          та проєкти локально.
         </p>
 
         <button
@@ -122,7 +142,30 @@ function createProject() {
         </button>
       </section>
 
-      <section class="tf5-panel tf6-project-panel" aria-label="Проєкти">
+      <section
+        class="tf7-persistence"
+        :class="`tf7-persistence--${persistenceState.status}`"
+        role="status"
+        aria-live="polite"
+      >
+        <strong>Локальне збереження</strong>
+
+        <span>{{ saveMessage }}</span>
+
+        <button
+          v-if="persistenceState.canRetry"
+          type="button"
+          class="tf5-btn"
+          @click="retrySave"
+        >
+          Повторити збереження
+        </button>
+      </section>
+
+      <section
+        class="tf5-panel tf6-project-panel"
+        aria-label="Проєкти"
+      >
         <h2>Мої проєкти</h2>
 
         <div class="tf6-project-list">
@@ -136,7 +179,10 @@ function createProject() {
           </span>
         </div>
 
-        <form class="tf6-project-form" @submit.prevent="createProject">
+        <form
+          class="tf6-project-form"
+          @submit.prevent="createProject"
+        >
           <label>
             Назва нового проєкту
 
@@ -149,12 +195,19 @@ function createProject() {
             />
           </label>
 
-          <button type="submit" class="tf5-btn tf5-btn--primary">
+          <button
+            type="submit"
+            class="tf5-btn tf5-btn--primary"
+          >
             Створити проєкт
           </button>
         </form>
 
-        <p v-if="newProjectError" class="tf5-error" role="alert">
+        <p
+          v-if="newProjectError"
+          class="tf5-error"
+          role="alert"
+        >
           {{ newProjectError }}
         </p>
       </section>
@@ -190,7 +243,10 @@ function createProject() {
           </div>
         </div>
 
-        <div v-if="visibleTasks.length" class="tf3-task-grid">
+        <div
+          v-if="visibleTasks.length"
+          class="tf3-task-grid"
+        >
           <TaskCard
             v-for="task in visibleTasks"
             :key="task.id"
@@ -203,7 +259,10 @@ function createProject() {
           />
         </div>
 
-        <div v-else class="tf5-empty">
+        <div
+          v-else
+          class="tf5-empty"
+        >
           <p>За поточними умовами завдань не знайдено.</p>
 
           <button
